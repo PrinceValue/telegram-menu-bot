@@ -218,7 +218,7 @@ const catalog = [
   { id: 'f21', name: 'Кукурудза барбекю', price: 34, step: 50, unit: 'г', cat: 'food' },
   {
     id: 'f22',
-    name: 'Кукурудза «мед/гірчиця» (Немає)',
+    name: 'Кукурудза «мед/гірчиця»',
     price: 34,
     step: 50,
     unit: 'г',
