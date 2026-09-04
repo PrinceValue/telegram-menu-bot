@@ -252,7 +252,10 @@ const catalog = [
     unit: 'г',
     cat: 'food',
   },
-  { id: 'f37', name: 'Чіпси курячі «Пармезан»', price: 84, step: 50, unit: 'г', cat: 'food' },
+  { id: 'f37', name: 'Картопляні чіпси "сир"»', price: 50, step: 1, unit: 'уп(100г)', cat: 'food' },
+  { id: 'f38', name: 'Картопляні чіпси "бекон"»', price: 50, step: 1, unit: 'уп(100г)', cat: 'food' },
+  { id: 'f39', name: 'Картопляні чіпси "паприка"»', price: 50, step: 1, unit: 'уп(100г)', cat: 'food' },
+  { id: 'f40', name: 'Картопляні чіпси "краб"»', price: 50, step: 1, unit: 'уп(100г)', cat: 'food' },
 ]
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
