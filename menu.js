@@ -182,7 +182,7 @@ const catalog = [
     step: 0.5,
     unit: 'л',
     cat: 'light',
-    desc: "Світле нефільтроване",
+    desc: 'Світле нефільтроване',
   },
   {
     id: 'd19',
@@ -191,10 +191,10 @@ const catalog = [
     step: 0.5,
     unit: 'л',
     cat: 'light',
-    desc: "Cвітле",
+    desc: 'Cвітле',
   },
 
-  // --- ЗАКУСКИ (Повний список) ---
+  // --- ЗАКУСКИ (холодні) ---
   { id: 'f1', name: 'Анчоус', price: 55, step: 50, unit: 'г', cat: 'food' },
   { id: 'f2', name: 'Арахіс зі смаком бекону', price: 23, step: 50, unit: 'г', cat: 'food' },
   { id: 'f3', name: 'Арахіс зі смаком сиру', price: 23, step: 50, unit: 'г', cat: 'food' },
@@ -253,15 +253,56 @@ const catalog = [
     cat: 'food',
   },
   { id: 'f37', name: 'Картопляні чіпси "сир"»', price: 50, step: 1, unit: 'уп(100г)', cat: 'food' },
-  { id: 'f38', name: 'Картопляні чіпси "бекон"»', price: 50, step: 1, unit: 'уп(100г)', cat: 'food' },
-  { id: 'f39', name: 'Картопляні чіпси "паприка"»', price: 50, step: 1, unit: 'уп(100г)', cat: 'food' },
-  { id: 'f40', name: 'Картопляні чіпси "краб"»', price: 50, step: 1, unit: 'уп(100г)', cat: 'food' },
+  {
+    id: 'f38',
+    name: 'Картопляні чіпси "бекон"»',
+    price: 50,
+    step: 1,
+    unit: 'уп(100г)',
+    cat: 'food',
+  },
+  {
+    id: 'f39',
+    name: 'Картопляні чіпси "паприка"»',
+    price: 50,
+    step: 1,
+    unit: 'уп(100г)',
+    cat: 'food',
+  },
+  {
+    id: 'f40',
+    name: 'Картопляні чіпси "краб"»',
+    price: 50,
+    step: 1,
+    unit: 'уп(100г)',
+    cat: 'food',
+  },
+
+  // --- ГАРЯЧІ ЗАКУСКИ (ціна вказана за 100г) ---
+  { id: 'h1', name: 'Картопля фрі', price: 54, step: 100, unit: 'г', cat: 'hotFood' },
+  { id: 'h2', name: 'Нагетси', price: 120, step: 100, unit: 'г', cat: 'hotFood' },
+  { id: 'h3', name: 'Курячі крила', price: 120, step: 100, unit: 'г', cat: 'hotFood' },
+
+  // --- СОУСИ ---
+  { id: 's1', name: 'Соус часниковий', price: 10, step: 30, unit: 'г', cat: 'sauce' },
+  { id: 's2', name: 'Соус бургер', price: 10, step: 30, unit: 'г', cat: 'sauce' },
+  { id: 's3', name: 'Соус сирний', price: 10, step: 30, unit: 'г', cat: 'sauce' },
+  { id: 's4', name: 'Соус солодкий чилі', price: 10, step: 30, unit: 'г', cat: 'sauce' },
 ]
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
 
 // --- 3. СЕСІЇ ДЛЯ КОШИКА ТА СТАНУ ---
-bot.use(session({ defaultSession: () => ({ cart: [], awaitingAmountFor: null }) }))
+bot.use(
+  session({
+    defaultSession: () => ({
+      cart: [],
+      awaitingAmountFor: null,
+      awaitingComment: false,
+      comment: null,
+    }),
+  })
+)
 
 const ITEMS_PER_PAGE = 7
 
@@ -284,29 +325,37 @@ function getCategoryMenu(catId, title) {
   return { text, keyboard: Markup.inlineKeyboard(buttons) }
 }
 
-function getFoodPage(page = 0) {
-  const foodItems = catalog.filter((i) => i.cat === 'food')
-  const totalPages = Math.ceil(foodItems.length / ITEMS_PER_PAGE)
+// Універсальна функція для сторінкованих категорій закусок (холодні / гарячі / соуси).
+// catId — категорія в catalog, title — заголовок, icon — емодзі, backAction — куди веде "Назад".
+function getPagedCategoryMenu(catId, title, icon, backAction, page = 0) {
+  const items = catalog.filter((i) => i.cat === catId)
+  const totalPages = Math.max(1, Math.ceil(items.length / ITEMS_PER_PAGE))
   const start = page * ITEMS_PER_PAGE
-  const items = foodItems.slice(start, start + ITEMS_PER_PAGE)
+  const pageItems = items.slice(start, start + ITEMS_PER_PAGE)
 
-  let text = `🥪 <b>ЗАКУСКИ (Стор. ${page + 1}/${totalPages})</b>\n───────────────\n\n`
-  const buttons = items.map((item) => {
+  let text = `${icon} <b>${title}</b>${totalPages > 1 ? ` (Стор. ${page + 1}/${totalPages})` : ''}\n───────────────\n\n`
+  const buttons = pageItems.map((item) => {
     const isOut = item.name.includes('(Немає)')
-    text += `▫️ <b>${item.name}</b> \n└ 💳 <b>${item.price} грн</b> / ${item.step} ${item.unit}\n\n`
+    const noPrice = item.price === null || item.price === undefined
+    const priceLabel = noPrice ? '❔ ціна не вказана' : `💳 <b>${item.price} грн</b>`
+    text += `▫️ <b>${item.name}</b> \n└ ${priceLabel} / ${item.step} ${item.unit}\n\n`
 
     if (isOut) return [Markup.button.callback(`❌ ${item.name} (Немає)`, 'noop')]
+    if (noPrice) return [Markup.button.callback(`❔ ${item.name} (немає ціни)`, 'noop')]
     return [Markup.button.callback(`🛒 ${item.name}`, `buy_${item.id}`)]
   })
 
-  const navRow = []
-  if (page > 0) navRow.push(Markup.button.callback('⬅️', `food_page_${page - 1}`))
-  navRow.push(Markup.button.callback(`${page + 1} / ${totalPages}`, 'noop'))
-  if (page < totalPages - 1) navRow.push(Markup.button.callback('➡️', `food_page_${page + 1}`))
+  if (totalPages > 1) {
+    const navRow = []
+    if (page > 0) navRow.push(Markup.button.callback('⬅️', `page_${catId}_${page - 1}`))
+    navRow.push(Markup.button.callback(`${page + 1} / ${totalPages}`, 'noop'))
+    if (page < totalPages - 1)
+      navRow.push(Markup.button.callback('➡️', `page_${catId}_${page + 1}`))
+    buttons.push(navRow)
+  }
 
-  buttons.push(navRow)
   buttons.push([Markup.button.callback('🛒 Перейти до кошика', 'view_cart')])
-  buttons.push([Markup.button.callback('⬅️ Головне меню', 'back_to_menu')])
+  buttons.push([Markup.button.callback('⬅️ Назад', backAction)])
 
   return { text, keyboard: Markup.inlineKeyboard(buttons) }
 }
@@ -324,11 +373,13 @@ function getMainKeyboard() {
 // --- 4. НАВІГАЦІЯ ТА МЕНЮ ---
 bot.start((ctx) => {
   ctx.session.awaitingAmountFor = null
+  ctx.session.awaitingComment = false
   ctx.reply('👋 Ласкаво просимо! Оберіть категорію:', getMainKeyboard())
 })
 
 bot.action('back_to_menu', (ctx) => {
   ctx.session.awaitingAmountFor = null
+  ctx.session.awaitingComment = false
   ctx.editMessageText('Оберіть категорію:', getMainKeyboard())
 })
 
@@ -375,15 +426,55 @@ bot.action('cat_nonAlcoholic', (ctx) => {
   ctx.editMessageText(text, { parse_mode: 'HTML', ...keyboard })
 })
 
+// "Закуски" тепер відкриває підменю: холодні закуски / гарячі закуски / соуси
 bot.action('category_food', (ctx) => {
   ctx.session.awaitingAmountFor = null
-  const { text, keyboard } = getFoodPage(0)
+  ctx.editMessageText('🥪 <b>Оберіть тип закусок:</b>', {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('🥪 Закуски', 'cat_food_cold')],
+      [Markup.button.callback('🔥 Гарячі закуски', 'cat_food_hot')],
+      [Markup.button.callback('🧂 Соуси', 'cat_sauce')],
+      [
+        Markup.button.callback('⬅️ Головне меню', 'back_to_menu'),
+        Markup.button.callback('🛒 Кошик', 'view_cart'),
+      ],
+    ]),
+  })
+})
+
+bot.action('cat_food_cold', (ctx) => {
+  const { text, keyboard } = getPagedCategoryMenu('food', 'ЗАКУСКИ', '🥪', 'category_food', 0)
   ctx.editMessageText(text, { parse_mode: 'HTML', ...keyboard })
 })
 
-bot.action(/^food_page_(\d+)$/, (ctx) => {
-  const page = parseInt(ctx.match[1], 10)
-  const { text, keyboard } = getFoodPage(page)
+bot.action('cat_food_hot', (ctx) => {
+  const { text, keyboard } = getPagedCategoryMenu(
+    'hotFood',
+    'ГАРЯЧІ ЗАКУСКИ (ціна за 100г)',
+    '🔥',
+    'category_food',
+    0
+  )
+  ctx.editMessageText(text, { parse_mode: 'HTML', ...keyboard })
+})
+
+bot.action('cat_sauce', (ctx) => {
+  const { text, keyboard } = getPagedCategoryMenu('sauce', 'СОУСИ', '🧂', 'category_food', 0)
+  ctx.editMessageText(text, { parse_mode: 'HTML', ...keyboard })
+})
+
+// Пагінація для будь-якої зі сторінкованих категорій: food / hotFood / sauce
+bot.action(/^page_(food|hotFood|sauce)_(\d+)$/, (ctx) => {
+  const catId = ctx.match[1]
+  const page = parseInt(ctx.match[2], 10)
+  const titles = {
+    food: ['ЗАКУСКИ', '🥪'],
+    hotFood: ['ГАРЯЧІ ЗАКУСКИ (ціна за 100г)', '🔥'],
+    sauce: ['СОУСИ', '🧂'],
+  }
+  const [title, icon] = titles[catId]
+  const { text, keyboard } = getPagedCategoryMenu(catId, title, icon, 'category_food', page)
   ctx.editMessageText(text, { parse_mode: 'HTML', ...keyboard })
 })
 
@@ -395,8 +486,12 @@ bot.action(/^buy_(.+)$/, (ctx) => {
   const item = catalog.find((i) => i.id === itemId)
 
   if (!item) return ctx.answerCbQuery('Товар не знайдено 😔')
+  if (item.price === null || item.price === undefined) {
+    return ctx.answerCbQuery('У цього товару ще не вказана ціна 😔')
+  }
 
   ctx.session.awaitingAmountFor = itemId
+  ctx.session.awaitingComment = false
 
   const example = item.unit === 'л' ? '1.5' : item.unit === 'шт' ? '2' : '150'
   ctx.reply(
@@ -409,8 +504,38 @@ bot.action(/^buy_(.+)$/, (ctx) => {
   ctx.answerCbQuery()
 })
 
+// --- КОМЕНТАР ДО ЗАМОВЛЕННЯ ---
+bot.action('add_comment', (ctx) => {
+  ctx.session.awaitingAmountFor = null
+  ctx.session.awaitingComment = true
+  ctx.reply(
+    ctx.session.comment
+      ? `✏️ Поточний коментар: «${ctx.session.comment}»\n\nНапишіть новий текст коментаря:`
+      : '✍️ Напишіть коментар до замовлення (наприклад: побажання, час):',
+    {
+      ...Markup.inlineKeyboard([[Markup.button.callback('❌ Скасувати', 'view_cart')]]),
+    }
+  )
+  ctx.answerCbQuery()
+})
+
+bot.action('clear_comment', (ctx) => {
+  ctx.session.comment = null
+  ctx.answerCbQuery('Коментар видалено')
+  renderCart(ctx, true)
+})
+
 // ОБРОБКА ТЕКСТОВОГО ВВОДУ ВІД КОРИСТУВАЧА
 bot.on('text', (ctx, next) => {
+  // 1) Якщо очікуємо коментар до замовлення
+  if (ctx.session.awaitingComment) {
+    ctx.session.comment = ctx.message.text.trim()
+    ctx.session.awaitingComment = false
+    ctx.reply('✅ Коментар збережено!')
+    return renderCart(ctx, false)
+  }
+
+  // 2) Якщо очікуємо кількість/вагу товару
   const itemId = ctx.session.awaitingAmountFor
   if (!itemId) return next()
 
@@ -453,12 +578,13 @@ bot.on('text', (ctx, next) => {
 })
 
 // --- 6. КОШИК ТА ВІДПРАВКА ЗАМОВЛЕННЯ ---
-bot.action('view_cart', (ctx) => {
-  ctx.session.awaitingAmountFor = null
+
+// Формує текст і клавіатуру кошика. Використовується і з action, і після збереження коментаря.
+function buildCartView(ctx) {
   const cart = ctx.session.cart || []
 
   if (cart.length === 0) {
-    return ctx.editMessageText('Ваш кошик наразі порожній 😔', getMainKeyboard())
+    return { text: 'Ваш кошик наразі порожній 😔', keyboard: getMainKeyboard(), empty: true }
   }
 
   let text = '🛒 <b>ВАШ КОШИК:</b>\n───────────────\n\n'
@@ -471,18 +597,48 @@ bot.action('view_cart', (ctx) => {
 
   text += `───────────────\n🧾 <b>ЗАГАЛЬНА СУМА: ${Math.ceil(totalSum)} грн</b>`
 
-  ctx.editMessageText(text, {
-    parse_mode: 'HTML',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('✅ ОФОРМИТИ ЗАМОВЛЕННЯ', 'checkout')],
-      [Markup.button.callback('🗑 Очистити кошик', 'clear_cart')],
-      [Markup.button.callback('⬅️ До меню', 'back_to_menu')],
-    ]),
-  })
+  if (ctx.session.comment) {
+    text += `\n💬 <b>Коментар:</b> ${ctx.session.comment}`
+  }
+
+  const buttons = [
+    [
+      Markup.button.callback(
+        ctx.session.comment ? '✏️ Змінити коментар' : '📝 Додати коментар',
+        'add_comment'
+      ),
+    ],
+  ]
+  if (ctx.session.comment) {
+    buttons.push([Markup.button.callback('🗑 Видалити коментар', 'clear_comment')])
+  }
+  buttons.push([Markup.button.callback('✅ ОФОРМИТИ ЗАМОВЛЕННЯ', 'checkout')])
+  buttons.push([Markup.button.callback('🗑 Очистити кошик', 'clear_cart')])
+  buttons.push([Markup.button.callback('⬅️ До меню', 'back_to_menu')])
+
+  return { text, keyboard: Markup.inlineKeyboard(buttons), empty: false }
+}
+
+// Виводить кошик як нове повідомлення (після введення тексту) або через edit (з callback).
+function renderCart(ctx, viaEdit) {
+  const { text, keyboard } = buildCartView(ctx)
+  if (viaEdit) {
+    return ctx.editMessageText(text, { parse_mode: 'HTML', ...keyboard })
+  }
+  return ctx.reply(text, { parse_mode: 'HTML', ...keyboard })
+}
+
+bot.action('view_cart', (ctx) => {
+  ctx.session.awaitingAmountFor = null
+  ctx.session.awaitingComment = false
+  const { text, keyboard, empty } = buildCartView(ctx)
+  if (empty) return ctx.editMessageText(text, keyboard)
+  ctx.editMessageText(text, { parse_mode: 'HTML', ...keyboard })
 })
 
 bot.action('clear_cart', (ctx) => {
   ctx.session.cart = []
+  ctx.session.comment = null
   ctx.answerCbQuery('Кошик очищено!')
   ctx.editMessageText('Кошик очищено. Що бажаєте замовити?', getMainKeyboard())
 })
@@ -505,12 +661,17 @@ bot.action('checkout', async (ctx) => {
 
   orderText += `───────────────\n🧾 <b>ВСЬОГО ДО СПЛАТИ: ${Math.ceil(totalSum)} грн</b>`
 
+  if (ctx.session.comment) {
+    orderText += `\n\n💬 <b>Коментар клієнта:</b> ${ctx.session.comment}`
+  }
+
   try {
     // ВІДПРАВКА ЗАМОВЛЕННЯ У ГРУПУ ЗА ID
     await ctx.telegram.sendMessage(process.env.GROUP_ID, orderText, { parse_mode: 'HTML' })
 
-    // Очищаємо кошик після успішного оформлення
+    // Очищаємо кошик і коментар після успішного оформлення
     ctx.session.cart = []
+    ctx.session.comment = null
 
     ctx.editMessageText(
       "🎉 <b>Дякуємо за замовлення!</b>\n\nВоно вже відправлене. Наш менеджер зв'яжеться з вами найближчим часом.",
