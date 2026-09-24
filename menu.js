@@ -242,7 +242,7 @@ const catalog = [
   { id: 'f31', name: 'Соломка лосося сушена', price: 48, step: 50, unit: 'г', cat: 'food' },
   { id: 'f32', name: 'Стружка кальмара звичайна', price: 80, step: 50, unit: 'г', cat: 'food' },
   { id: 'f33', name: 'Стружка кальмара (краб)', price: 80, step: 50, unit: 'г', cat: 'food' },
-  { id: 'f34', name: 'Тарань ікряна', price: 95, step: 50, unit: 'г', cat: 'food' },
+  // { id: 'f34', name: 'Тарань ікряна', price: 95, step: 50, unit: 'г', cat: 'food' },
   { id: 'f35', name: 'Фісташка', price: 78, step: 50, unit: 'г', cat: 'food' },
   {
     id: 'f36',
@@ -284,10 +284,10 @@ const catalog = [
   { id: 'h3', name: 'Курячі крила', price: 120, step: 100, unit: 'г', cat: 'hotFood' },
 
   // --- СОУСИ ---
-  { id: 's1', name: 'Соус часниковий', price: 10, step: 30, unit: 'г', cat: 'sauce' },
-  { id: 's2', name: 'Соус бургер', price: 10, step: 30, unit: 'г', cat: 'sauce' },
-  { id: 's3', name: 'Соус сирний', price: 10, step: 30, unit: 'г', cat: 'sauce' },
-  { id: 's4', name: 'Соус солодкий чилі', price: 10, step: 30, unit: 'г', cat: 'sauce' },
+  { id: 's1', name: 'Соус часниковий', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's2', name: 'Соус бургер', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's3', name: 'Соус сирний', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's4', name: 'Соус солодкий чилі', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
 ]
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
