@@ -242,7 +242,7 @@ const catalog = [
   { id: 'f31', name: 'Соломка лосося сушена', price: 48, step: 50, unit: 'г', cat: 'food' },
   { id: 'f32', name: 'Стружка кальмара звичайна', price: 80, step: 50, unit: 'г', cat: 'food' },
   { id: 'f33', name: 'Стружка кальмара (краб)', price: 80, step: 50, unit: 'г', cat: 'food' },
-  // { id: 'f34', name: 'Тарань ікряна', price: 95, step: 50, unit: 'г', cat: 'food' },
+  { id: 'f34', name: 'Тарань ікряна', price: 95, step: 50, unit: 'г', cat: 'food' },
   { id: 'f35', name: 'Фісташка', price: 78, step: 50, unit: 'г', cat: 'food' },
   {
     id: 'f36',
@@ -279,11 +279,15 @@ const catalog = [
   },
 
   // --- ГАРЯЧІ ЗАКУСКИ (ціна вказана за 100г) ---
-  { id: 'h1', name: 'Картопля фрі', price: 54, step: 100, unit: 'г', cat: 'hotFood' },
-  { id: 'h2', name: 'Нагетси', price: 120, step: 100, unit: 'г', cat: 'hotFood' },
-  { id: 'h3', name: 'Курячі крила', price: 120, step: 100, unit: 'г', cat: 'hotFood' },
+  // ⚠️ ЦІНИ ПОКИ ЗАГЛУШКИ (null) — впишіть реальну ціну за 100г замість null,
+  // інакше товар буде показуватись, але кнопка "Додати" буде недоступна.
+  // Щоб додати нову позицію — просто скопіюйте рядок і зміните id/name/price.
+  { id: 'h1', name: 'Картопля фрі', price: null, step: 100, unit: 'г', cat: 'hotFood' },
+  { id: 'h2', name: 'Нагетси', price: null, step: 100, unit: 'г', cat: 'hotFood' },
+  { id: 'h3', name: 'Курячі крила', price: null, step: 100, unit: 'г', cat: 'hotFood' },
 
   // --- СОУСИ ---
+  // ⚠️ Ціни-заглушки (null), впишіть реальні. Крок/одиницю можна змінити на свою (напр. 'шт' для порційних соусників).
   { id: 's1', name: 'Соус часниковий', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
   { id: 's2', name: 'Соус бургер', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
   { id: 's3', name: 'Соус сирний', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
@@ -291,6 +295,34 @@ const catalog = [
 ]
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
+
+// --- ГЛОБАЛЬНИЙ ОБРОБНИК ПОМИЛОК ---
+// Без цього ОДНА невдала операція (наприклад, sendMessage у групу з неправильним
+// GROUP_ID, або editMessageText з текстом, який уже показаний) призводить до
+// необробленої помилки, і Node завершує весь процес — бот "зависає" назавжди,
+// поки хтось вручну не перезапустить сервер. Це і є найімовірніша причина того,
+// що бот "перестає працювати" після одного замовлення.
+bot.catch((err, ctx) => {
+  console.error(`❌ Помилка в обробнику "${ctx.updateType}":`, err)
+  try {
+    if (ctx.callbackQuery) {
+      ctx.answerCbQuery('⚠️ Сталася помилка, спробуйте ще раз').catch(() => {})
+    } else {
+      ctx.reply('⚠️ Сталася помилка. Спробуйте /start ще раз.').catch(() => {})
+    }
+  } catch (e) {
+    // ігноруємо вторинну помилку під час звітування про першу
+  }
+})
+
+// Додаткова страховка: якщо помилка виникне поза обробниками Telegraf
+// (наприклад, у самому HTTP-сервері), процес все одно не впаде мовчки.
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ Необроблена помилка (unhandledRejection):', reason)
+})
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ Критична помилка (uncaughtException):', err)
+})
 
 // --- 3. СЕСІЇ ДЛЯ КОШИКА ТА СТАНУ ---
 bot.use(
@@ -511,7 +543,7 @@ bot.action('add_comment', (ctx) => {
   ctx.reply(
     ctx.session.comment
       ? `✏️ Поточний коментар: «${ctx.session.comment}»\n\nНапишіть новий текст коментаря:`
-      : '✍️ Напишіть коментар до замовлення (наприклад: побажання, час):',
+      : '✍️ Напишіть коментар до замовлення (наприклад: побажання, час доставки, номер столика):',
     {
       ...Markup.inlineKeyboard([[Markup.button.callback('❌ Скасувати', 'view_cart')]]),
     }
@@ -668,12 +700,20 @@ bot.action('checkout', async (ctx) => {
   try {
     // ВІДПРАВКА ЗАМОВЛЕННЯ У ГРУПУ ЗА ID
     await ctx.telegram.sendMessage(process.env.GROUP_ID, orderText, { parse_mode: 'HTML' })
+  } catch (err) {
+    console.error('Помилка відправки замовлення в групу:', err)
+    return ctx.answerCbQuery('❌ Помилка. Перевірте, чи додано бота до групи та чи має він права.')
+  }
 
-    // Очищаємо кошик і коментар після успішного оформлення
-    ctx.session.cart = []
-    ctx.session.comment = null
+  // Замовлення точно дійшло до групи — тепер очищаємо кошик і коментар.
+  ctx.session.cart = []
+  ctx.session.comment = null
 
-    ctx.editMessageText(
+  // Це окремий try/catch: навіть якщо редагування повідомлення не вдасться
+  // (наприклад, Telegram поверне "message is not modified"), замовлення вже
+  // відправлене, і клієнту не покажеться хибне повідомлення про помилку.
+  try {
+    await ctx.editMessageText(
       "🎉 <b>Дякуємо за замовлення!</b>\n\nВоно вже відправлене. Наш менеджер зв'яжеться з вами найближчим часом.",
       {
         parse_mode: 'HTML',
@@ -681,8 +721,8 @@ bot.action('checkout', async (ctx) => {
       }
     )
   } catch (err) {
-    console.error('Помилка відправки замовлення:', err)
-    ctx.answerCbQuery('❌ Помилка. Перевірте, чи додано бота до групи та чи має він права.')
+    console.error('Замовлення відправлено, але не вдалось оновити повідомлення:', err)
+    ctx.reply('🎉 Дякуємо за замовлення! Воно вже відправлене.').catch(() => {})
   }
 })
 
