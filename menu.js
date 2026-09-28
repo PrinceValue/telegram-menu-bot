@@ -279,29 +279,26 @@ const catalog = [
   },
 
   // --- ГАРЯЧІ ЗАКУСКИ (ціна вказана за 100г) ---
-  // ⚠️ ЦІНИ ПОКИ ЗАГЛУШКИ (null) — впишіть реальну ціну за 100г замість null,
-  // інакше товар буде показуватись, але кнопка "Додати" буде недоступна.
-  // Щоб додати нову позицію — просто скопіюйте рядок і зміните id/name/price.
   { id: 'h1', name: 'Картопля фрі', price: 54, step: 100, unit: 'г', cat: 'hotFood' },
   { id: 'h2', name: 'Нагетси', price: 120, step: 100, unit: 'г', cat: 'hotFood' },
   { id: 'h3', name: 'Курячі крила', price: 120, step: 100, unit: 'г', cat: 'hotFood' },
+  { id: 'h4', name: 'Цибулеві кільца', price: 76, step: 100, unit: 'г', cat: 'hotFood' },
+  { id: 'h5', name: 'Сирні палочки', price: 100, step: 100, unit: 'г', cat: 'hotFood' },
 
   // --- СОУСИ ---
-  // ⚠️ Ціни-заглушки (null), впишіть реальні. Крок/одиницю можна змінити на свою (напр. 'шт' для порційних соусників).
-  { id: 's1', name: 'Соус часниковий', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
-  { id: 's2', name: 'Соус бургер', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
-  { id: 's3', name: 'Соус сирний', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
-  { id: 's4', name: 'Соус солодкий чилі', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's1', name: 'Соус "Часниковий"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's2', name: 'Соус "Бургер"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's3', name: 'Соус "Сирний"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's4', name: 'Соус "Солодкий" чилі', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's4', name: 'Соус "Манго-чилі"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's4', name: 'Соус "Кисло-солодкий"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's4', name: 'Соус "Брусничний"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's4', name: 'Соус "Барбекю"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
 ]
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
 
 // --- ГЛОБАЛЬНИЙ ОБРОБНИК ПОМИЛОК ---
-// Без цього ОДНА невдала операція (наприклад, sendMessage у групу з неправильним
-// GROUP_ID, або editMessageText з текстом, який уже показаний) призводить до
-// необробленої помилки, і Node завершує весь процес — бот "зависає" назавжди,
-// поки хтось вручну не перезапустить сервер. Це і є найімовірніша причина того,
-// що бот "перестає працювати" після одного замовлення.
 bot.catch((err, ctx) => {
   console.error(`❌ Помилка в обробнику "${ctx.updateType}":`, err)
   try {
