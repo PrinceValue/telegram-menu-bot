@@ -184,15 +184,7 @@ const catalog = [
     cat: 'light',
     desc: 'Світле нефільтроване',
   },
-  {
-    id: 'd19',
-    name: 'Віденське',
-    price: 57,
-    step: 0.5,
-    unit: 'л',
-    cat: 'light',
-    desc: 'Cвітле',
-  },
+  { id: 'd19', name: 'Віденське', price: 57, step: 0.5, unit: 'л', cat: 'light', desc: 'Cвітле' },
   {
     id: 'd20',
     name: 'Мексиканський лагер',
@@ -225,14 +217,7 @@ const catalog = [
   { id: 'f19', name: 'Кранч (мікс)', price: 24, step: 50, unit: 'г', cat: 'food' },
   { id: 'f20', name: 'Кріспі мікс смаків', price: 27, step: 50, unit: 'г', cat: 'food' },
   { id: 'f21', name: 'Кукурудза барбекю', price: 34, step: 50, unit: 'г', cat: 'food' },
-  {
-    id: 'f22',
-    name: 'Кукурудза «мед/гірчиця»',
-    price: 34,
-    step: 50,
-    unit: 'г',
-    cat: 'food',
-  },
+  { id: 'f22', name: 'Кукурудза «мед/гірчиця»', price: 34, step: 50, unit: 'г', cat: 'food' },
   {
     id: 'f23',
     name: 'Курка «Халяль» теріякі (Немає)',
@@ -306,6 +291,40 @@ const catalog = [
   { id: 's8', name: 'Соус "Барбекю"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
 ]
 
+// --- ДОПОМІЖНІ ФУНКЦІЇ ---
+
+// Екранування тексту, який потрапляє в повідомлення з parse_mode: 'HTML'
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+// Години роботи та часовий пояс (час рахується за Києвом незалежно від хостингу)
+const TZ = 'Europe/Kyiv'
+const WORK_HOURS = { open: '10:00', close: '23:00' } // ← поставте свої години роботи
+
+const toMin = (hhmm) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
+const fmtMin = (m) => {
+  m = ((m % 1440) + 1440) % 1440
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0')
+}
+function nowMinutes() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date())
+  const h = Number(parts.find((p) => p.type === 'hour').value) % 24
+  const m = Number(parts.find((p) => p.type === 'minute').value)
+  return h * 60 + m
+}
+function isWithinWorkHours(m) {
+  const o = toMin(WORK_HOURS.open)
+  const c = toMin(WORK_HOURS.close)
+  return o <= c ? m >= o && m <= c : m >= o || m <= c
+}
+
 const bot = new Telegraf(process.env.BOT_TOKEN)
 
 // --- ГЛОБАЛЬНИЙ ОБРОБНИК ПОМИЛОК ---
@@ -338,10 +357,21 @@ bot.use(
       cart: [],
       awaitingAmountFor: null,
       awaitingComment: false,
+      awaitingPickupTime: false,
       comment: null,
+      pickup: null,
     }),
   })
 )
+
+// Будь-яке натискання кнопки (крім "Вказати час") скасовує очікування часу видачі,
+// щоб випадковий текст пізніше не сприймався як час.
+bot.use((ctx, next) => {
+  if (ctx.callbackQuery && ctx.callbackQuery.data !== 'pickup_custom' && ctx.session) {
+    ctx.session.awaitingPickupTime = false
+  }
+  return next()
+})
 
 const ITEMS_PER_PAGE = 7
 
@@ -413,6 +443,7 @@ function getMainKeyboard() {
 bot.start((ctx) => {
   ctx.session.awaitingAmountFor = null
   ctx.session.awaitingComment = false
+  ctx.session.awaitingPickupTime = false
   ctx.reply('👋 Ласкаво просимо! Оберіть категорію:', getMainKeyboard())
 })
 
@@ -566,6 +597,22 @@ bot.action('clear_comment', (ctx) => {
 
 // ОБРОБКА ТЕКСТОВОГО ВВОДУ ВІД КОРИСТУВАЧА
 bot.on('text', (ctx, next) => {
+  // 0) Якщо очікуємо свій час видачі (наприклад 19:30)
+  if (ctx.session.awaitingPickupTime) {
+    const m = ctx.message.text.trim().match(/^([01]?\d|2[0-3])[:.]([0-5]\d)$/)
+    if (!m) return ctx.reply('⚠️ Невірний формат. Напишіть час так: 19:30')
+    const t = Number(m[1]) * 60 + Number(m[2])
+    if (t < nowMinutes()) return ctx.reply('⚠️ Цей час уже минув. Вкажіть пізніший час:')
+    if (!isWithinWorkHours(t)) {
+      return ctx.reply(
+        `⚠️ Ми працюємо ${WORK_HOURS.open}–${WORK_HOURS.close}. Вкажіть час у цьому проміжку:`
+      )
+    }
+    ctx.session.awaitingPickupTime = false
+    ctx.session.pickup = `о ${fmtMin(t)}`
+    return finalizeOrder(ctx)
+  }
+
   // 1) Якщо очікуємо коментар до замовлення
   if (ctx.session.awaitingComment) {
     ctx.session.comment = ctx.message.text.trim()
@@ -591,8 +638,9 @@ bot.on('text', (ctx, next) => {
     return ctx.reply(`⚠️ Будь ласка, введіть коректне число:`)
   }
 
-  // Рахуємо ціну. Якщо це штучний товар (шт) - просто множимо
-  const calculatedPrice = (amount / item.step) * item.price
+  // Рахуємо ціну і одразу округлюємо вгору до цілої гривні (один раз, тут).
+  // toFixed(4) прибирає похибки плаваючої коми (70.00000000000001 -> 70).
+  const calculatedPrice = Math.ceil(+((amount / item.step) * item.price).toFixed(4))
 
   ctx.session.cart.push({
     id: item.id,
@@ -605,7 +653,7 @@ bot.on('text', (ctx, next) => {
   ctx.session.awaitingAmountFor = null
 
   ctx.reply(
-    `✅ <b>${item.name}</b> (${amount} ${item.unit}) додано в кошик!\nСума: <b>${Math.ceil(calculatedPrice)} грн</b>`,
+    `✅ <b>${item.name}</b> (${amount} ${item.unit}) додано в кошик!\nСума: <b>${calculatedPrice} грн</b>`,
     {
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
@@ -630,14 +678,14 @@ function buildCartView(ctx) {
   let totalSum = 0
 
   cart.forEach((item, index) => {
-    text += `${index + 1}. <b>${item.name}</b>\n└ ${item.amount} ${item.unit} — 💳 <b>${Math.ceil(item.price)} грн</b>\n\n`
+    text += `${index + 1}. <b>${item.name}</b>\n└ ${item.amount} ${item.unit} — 💳 <b>${item.price} грн</b>\n\n`
     totalSum += item.price
   })
 
-  text += `───────────────\n🧾 <b>ЗАГАЛЬНА СУМА: ${Math.ceil(totalSum)} грн</b>`
+  text += `───────────────\n🧾 <b>ЗАГАЛЬНА СУМА: ${totalSum} грн</b>`
 
   if (ctx.session.comment) {
-    text += `\n💬 <b>Коментар:</b> ${ctx.session.comment}`
+    text += `\n💬 <b>Коментар:</b> ${esc(ctx.session.comment)}`
   }
 
   const buttons = [
@@ -678,59 +726,156 @@ bot.action('view_cart', (ctx) => {
 bot.action('clear_cart', (ctx) => {
   ctx.session.cart = []
   ctx.session.comment = null
+  ctx.session.pickup = null
   ctx.answerCbQuery('Кошик очищено!')
   ctx.editMessageText('Кошик очищено. Що бажаєте замовити?', getMainKeyboard())
 })
 
+// --- ОФОРМЛЕННЯ: КРОК 1 — ВИБІР ЧАСУ ВИДАЧІ ---
 bot.action('checkout', async (ctx) => {
-  const cart = ctx.session.cart || []
-  if (cart.length === 0) return ctx.answerCbQuery('Кошик порожній!')
+  if ((ctx.session.cart || []).length === 0) return ctx.answerCbQuery('Кошик порожній!')
+  ctx.session.awaitingPickupTime = false
+  await ctx.answerCbQuery()
+  return ctx.editMessageText('⏰ <b>Коли заберете замовлення?</b>', {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [
+        Markup.button.callback('Через 15 хв', 'pickup_15'),
+        Markup.button.callback('Через 30 хв', 'pickup_30'),
+        Markup.button.callback('Через 1 год', 'pickup_60'),
+      ],
+      [Markup.button.callback('🕐 Вказати час', 'pickup_custom')],
+      [Markup.button.callback('⬅️ Назад до кошика', 'view_cart')],
+    ]),
+  })
+})
 
-  // Формуємо текст замовлення
-  let orderText = `🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n`
-  orderText += `👤 Покупець: ${ctx.from.first_name || 'Клієнт'} ${ctx.from.last_name || ''}\n`
-  orderText += `💬 Юзернейм: ${ctx.from.username ? '@' + ctx.from.username : '<i>не вказано</i>'}\n`
+bot.action(/^pickup_(15|30|60)$/, async (ctx) => {
+  const delta = Number(ctx.match[1])
+  const target = nowMinutes() + delta
+  if (!isWithinWorkHours(target % 1440)) {
+    return ctx.answerCbQuery(
+      `Ми працюємо ${WORK_HOURS.open}–${WORK_HOURS.close}. Оберіть інший час.`,
+      { show_alert: true }
+    )
+  }
+  const label = delta === 60 ? 'через 1 год' : `через ${delta} хв`
+  ctx.session.pickup = `${label} (~${fmtMin(target)})`
+  await ctx.answerCbQuery()
+  return finalizeOrder(ctx)
+})
+
+bot.action('pickup_custom', (ctx) => {
+  ctx.session.awaitingAmountFor = null
+  ctx.session.awaitingComment = false
+  ctx.session.awaitingPickupTime = true
+  ctx.reply('⏰ Напишіть час, коли заберете, у форматі <code>19:30</code>:', {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.callback('❌ Скасувати', 'view_cart')]]),
+  })
+  ctx.answerCbQuery()
+})
+
+// --- ОФОРМЛЕННЯ: КРОК 2 — ВІДПРАВКА ЗАМОВЛЕННЯ В ГРУПУ ---
+async function finalizeOrder(ctx) {
+  const cart = ctx.session.cart || []
+  if (cart.length === 0) return ctx.reply('Кошик порожній 😔')
+
+  const orderId = Date.now().toString(36).slice(-4).toUpperCase()
+  const name = `${ctx.from.first_name || 'Клієнт'} ${ctx.from.last_name || ''}`.trim()
+
+  let orderText = `🛍 <b>НОВЕ ЗАМОВЛЕННЯ #${orderId}</b>\n`
+  orderText += `⏰ <b>Забере:</b> ${esc(ctx.session.pickup || 'не вказано')}\n`
+  orderText += `👤 Покупець: ${esc(name)}\n`
+  orderText += `💬 Юзернейм: ${ctx.from.username ? '@' + esc(ctx.from.username) : '<i>не вказано</i>'}\n`
   orderText += `───────────────\n`
 
   let totalSum = 0
   cart.forEach((item, index) => {
-    orderText += `${index + 1}. <b>${item.name}</b> — ${item.amount} ${item.unit} (💳 ${Math.ceil(item.price)} грн)\n`
+    orderText += `${index + 1}. <b>${esc(item.name)}</b> — ${item.amount} ${esc(item.unit)} (💳 ${item.price} грн)\n`
     totalSum += item.price
   })
 
-  orderText += `───────────────\n🧾 <b>ВСЬОГО ДО СПЛАТИ: ${Math.ceil(totalSum)} грн</b>`
+  orderText += `───────────────\n🧾 <b>ВСЬОГО ДО СПЛАТИ: ${totalSum} грн</b>`
 
   if (ctx.session.comment) {
-    orderText += `\n\n💬 <b>Коментар клієнта:</b> ${ctx.session.comment}`
+    orderText += `\n\n💬 <b>Коментар клієнта:</b> ${esc(ctx.session.comment)}`
   }
 
   try {
-    // ВІДПРАВКА ЗАМОВЛЕННЯ У ГРУПУ ЗА ID
-    await ctx.telegram.sendMessage(process.env.GROUP_ID, orderText, { parse_mode: 'HTML' })
+    // ВІДПРАВКА ЗАМОВЛЕННЯ У ГРУПУ ЗА ID (з кнопками статусів для персоналу)
+    await ctx.telegram.sendMessage(process.env.GROUP_ID, orderText, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Прийнято', `ord_ok_${ctx.from.id}_${orderId}`),
+          Markup.button.callback('🍻 Готово', `ord_ready_${ctx.from.id}_${orderId}`),
+        ],
+      ]),
+    })
   } catch (err) {
     console.error('Помилка відправки замовлення в групу:', err)
-    return ctx.answerCbQuery('❌ Помилка. Перевірте, чи додано бота до групи та чи має він права.')
+    return ctx.reply('❌ Не вдалося відправити замовлення. Спробуйте ще раз трохи пізніше.')
   }
 
-  // Замовлення точно дійшло до групи — тепер очищаємо кошик і коментар.
+  // Замовлення точно дійшло до групи — тепер очищаємо кошик, коментар і час.
+  const pickup = ctx.session.pickup
   ctx.session.cart = []
   ctx.session.comment = null
+  ctx.session.pickup = null
 
-  // Це окремий try/catch: навіть якщо редагування повідомлення не вдасться
-  // (наприклад, Telegram поверне "message is not modified"), замовлення вже
-  // відправлене, і клієнту не покажеться хибне повідомлення про помилку.
-  try {
-    await ctx.editMessageText(
-      "🎉 <b>Дякуємо за замовлення!</b>\n\nВоно вже відправлене. Наш менеджер зв'яжеться з вами найближчим часом.",
-      {
-        parse_mode: 'HTML',
-        ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ На головну', 'back_to_menu')]]),
-      }
-    )
-  } catch (err) {
-    console.error('Замовлення відправлено, але не вдалось оновити повідомлення:', err)
-    ctx.reply('🎉 Дякуємо за замовлення! Воно вже відправлене.').catch(() => {})
+  const confirmText =
+    `🎉 <b>Дякуємо! Замовлення #${orderId} відправлене.</b>\n` +
+    `⏰ Заберете: ${esc(pickup || 'не вказано')}\n\n` +
+    `Ми напишемо вам тут, коли воно буде прийняте та готове. Оплата на місці.`
+  const opts = {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ На головну', 'back_to_menu')]]),
   }
+
+  // Окремий try/catch: навіть якщо редагування повідомлення не вдасться
+  // (наприклад, "message is not modified"), замовлення вже відправлене.
+  if (ctx.callbackQuery) {
+    try {
+      await ctx.editMessageText(confirmText, opts)
+    } catch (err) {
+      console.error('Замовлення відправлено, але не вдалось оновити повідомлення:', err)
+      await ctx.reply(confirmText, opts).catch(() => {})
+    }
+  } else {
+    await ctx.reply(confirmText, opts)
+  }
+}
+
+// --- ОФОРМЛЕННЯ: КРОК 3 — КНОПКИ СТАТУСІВ ДЛЯ ПЕРСОНАЛУ (у групі) ---
+bot.action(/^ord_(ok|ready)_(\d+)_(\w+)$/, async (ctx) => {
+  const [, kind, userId, orderId] = ctx.match
+  const text =
+    kind === 'ok'
+      ? `✅ Замовлення #${orderId} прийнято, готуємо.`
+      : `🍻 Замовлення #${orderId} готове — чекаємо на вас!`
+
+  try {
+    await ctx.telegram.sendMessage(userId, text)
+  } catch (err) {
+    console.error('Не вдалося написати клієнту:', err)
+    return ctx.answerCbQuery('⚠️ Не вдалося написати клієнту (можливо, він заблокував бота)', {
+      show_alert: true,
+    })
+  }
+
+  const next =
+    kind === 'ok'
+      ? Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✔️ Прийнято', 'noop'),
+            Markup.button.callback('🍻 Готово', `ord_ready_${userId}_${orderId}`),
+          ],
+        ])
+      : Markup.inlineKeyboard([[Markup.button.callback('✔️ Клієнта сповіщено', 'noop')]])
+
+  await ctx.editMessageReplyMarkup(next.reply_markup).catch(() => {})
+  await ctx.answerCbQuery('Клієнту надіслано')
 })
 
 // --- ЗАПУСК ---
