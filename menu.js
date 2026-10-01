@@ -193,6 +193,15 @@ const catalog = [
     cat: 'light',
     desc: 'Cвітле',
   },
+  {
+    id: 'd20',
+    name: 'Мексиканський лагер',
+    price: 90,
+    step: 0.5,
+    unit: 'л',
+    cat: 'light',
+    desc: 'Cвітле',
+  },
 
   // --- ЗАКУСКИ (холодні) ---
   { id: 'f1', name: 'Анчоус', price: 55, step: 50, unit: 'г', cat: 'food' },
@@ -284,16 +293,17 @@ const catalog = [
   { id: 'h3', name: 'Курячі крила', price: 120, step: 100, unit: 'г', cat: 'hotFood' },
   { id: 'h4', name: 'Цибулеві кільца', price: 76, step: 100, unit: 'г', cat: 'hotFood' },
   { id: 'h5', name: 'Сирні палочки', price: 100, step: 100, unit: 'г', cat: 'hotFood' },
+  { id: 'h6', name: 'Кільця кальмара в темпурі', price: 130, step: 100, unit: 'г', cat: 'hotFood' },
 
   // --- СОУСИ ---
   { id: 's1', name: 'Соус "Часниковий"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
   { id: 's2', name: 'Соус "Бургер"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
   { id: 's3', name: 'Соус "Сирний"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
   { id: 's4', name: 'Соус "Солодкий" чилі', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
-  { id: 's4', name: 'Соус "Манго-чилі"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
-  { id: 's4', name: 'Соус "Кисло-солодкий"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
-  { id: 's4', name: 'Соус "Брусничний"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
-  { id: 's4', name: 'Соус "Барбекю"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's5', name: 'Соус "Манго-чилі"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's6', name: 'Соус "Кисло-солодкий"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's7', name: 'Соус "Брусничний"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's8', name: 'Соус "Барбекю"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
 ]
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
