@@ -289,6 +289,7 @@ const catalog = [
   { id: 's6', name: 'Соус "Кисло-солодкий"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
   { id: 's7', name: 'Соус "Брусничний"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
   { id: 's8', name: 'Соус "Барбекю"', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
+  { id: 's9', name: 'Кетчуп', price: 10, step: 1, unit: 'шт', cat: 'sauce' },
 ]
 
 // --- ДОПОМІЖНІ ФУНКЦІЇ ---
