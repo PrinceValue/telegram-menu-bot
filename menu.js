@@ -194,6 +194,24 @@ const catalog = [
     cat: 'light',
     desc: 'Cвітле',
   },
+  {
+    id: 'd21',
+    name: 'Пиво темне Stout',
+    price: 107,
+    step: 0.5,
+    unit: 'л',
+    cat: 'dark',
+    desc: 'Темне',
+  },
+  {
+    id: 'd22',
+    name: '<Біртейль чорничний мафін>',
+    price: 53,
+    step: 0.5,
+    unit: 'л',
+    cat: 'cider',
+    desc: 'Зі смаком чорничного мафіну',
+  },
 
   // --- ЗАКУСКИ (холодні) ---
   { id: 'f1', name: 'Анчоус', price: 55, step: 50, unit: 'г', cat: 'food' },
