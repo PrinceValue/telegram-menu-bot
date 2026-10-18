@@ -184,7 +184,6 @@ const catalog = [
     cat: 'light',
     desc: 'Світле нефільтроване',
   },
-  { id: 'd19', name: 'Віденське', price: 57, step: 0.5, unit: 'л', cat: 'light', desc: 'Cвітле' },
   {
     id: 'd20',
     name: 'Мексиканський лагер',
